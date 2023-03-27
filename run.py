@@ -396,7 +396,7 @@ def main():
     with open(loss_bleu_filename, mode='w', newline='') as loss_bleu_file:
         csv_writer = csv.writer(loss_bleu_file)
         # Write the header row
-        csv_writer.writerow(['epoch', 'train_loss', 'valid_loss', 'bleu'])
+        csv_writer.writerow(['epoch', 'train_loss', 'bleu-4'])
     
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
@@ -465,6 +465,7 @@ def main():
         nb_tr_examples, nb_tr_steps,tr_loss,global_step,best_bleu,best_loss = 0, 0,0,0,0,1e6
         for epoch in range(args.num_train_epochs):
             log = list()
+            log.append(epoch)
             bar = tqdm(train_dataloader,total=len(train_dataloader))
             for batch in bar:
                 batch = tuple(t.to(device) for t in batch)
@@ -488,8 +489,6 @@ def main():
                     optimizer.zero_grad()
                     scheduler.step()
                     global_step += 1
-
-            log.append(tr_loss)
 
             if args.do_eval:
                 #Eval model with dev dataset
@@ -529,7 +528,8 @@ def main():
                           'train_loss': round(train_loss,5)}
                 for key in sorted(result.keys()):
                     logger.info("  %s = %s", key, str(result[key]))
-                logger.info("  "+"*"*20)   
+                logger.info("  "+"*"*20)
+                log.append(round(train_loss,5))
 
                 #save last checkpoint
                 last_output_dir = os.path.join(args.output_dir, 'checkpoint-last')
@@ -549,7 +549,6 @@ def main():
                     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
                     output_model_file = os.path.join(output_dir, "pytorch_model.bin")
                     torch.save(model_to_save.state_dict(), output_model_file)  
-                log.append(eval_loss)
 
                 #Calculate bleu  
                 if 'dev_bleu' in dev_dataset:
