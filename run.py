@@ -50,6 +50,9 @@ from parser import (remove_comments_and_docstrings,
                    index_to_code_token,
                    tree_to_variable_index)
 from tree_sitter import Language, Parser
+
+import csv
+
 logger = logging.getLogger(__name__)
 dfg_function={
     'python':DFG_python,
@@ -387,7 +390,14 @@ def main():
     # make dir if output_dir not exist
     if os.path.exists(args.output_dir) is False:
         os.makedirs(args.output_dir)
-        
+    
+    # path of csv file to output BLEU-4 after each epochs of train and write header to it
+    loss_bleu_filename = os.path.join(args.output_dir, 'loss_bleu.csv')
+    with open(loss_bleu_filename, mode='w', newline='') as loss_bleu_file:
+        csv_writer = csv.writer(loss_bleu_file)
+        # Write the header row
+        csv_writer.writerow(['epoch', 'train_loss', 'valid_loss', 'bleu'])
+    
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,do_lower_case=args.do_lower_case)
@@ -452,8 +462,9 @@ def main():
 
         model.train()
         dev_dataset={}
-        nb_tr_examples, nb_tr_steps,tr_loss,global_step,best_bleu,best_loss = 0, 0,0,0,0,1e6 
+        nb_tr_examples, nb_tr_steps,tr_loss,global_step,best_bleu,best_loss = 0, 0,0,0,0,1e6
         for epoch in range(args.num_train_epochs):
+            log = list()
             bar = tqdm(train_dataloader,total=len(train_dataloader))
             for batch in bar:
                 batch = tuple(t.to(device) for t in batch)
@@ -477,6 +488,8 @@ def main():
                     optimizer.zero_grad()
                     scheduler.step()
                     global_step += 1
+
+            log.append(tr_loss)
 
             if args.do_eval:
                 #Eval model with dev dataset
@@ -536,7 +549,7 @@ def main():
                     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
                     output_model_file = os.path.join(output_dir, "pytorch_model.bin")
                     torch.save(model_to_save.state_dict(), output_model_file)  
-
+                log.append(eval_loss)
 
                 #Calculate bleu  
                 if 'dev_bleu' in dev_dataset:
@@ -578,9 +591,16 @@ def main():
                 (goldMap, predictionMap) = bleu.computeMaps(predictions, os.path.join(args.output_dir, "dev.gold")) 
                 dev_bleu=round(bleu.bleuFromMaps(goldMap, predictionMap)[0],2)
                 logger.info("  %s = %s "%("bleu-4",str(dev_bleu)))
-                logger.info("  "+"*"*20)    
+                logger.info("  "+"*"*20)
+                logger.info("History Best bleu:%s",best_bleu)
+                log.append(dev_bleu)
+
+                with open(loss_bleu_filename, mode='a', newline='') as loss_bleu_file:
+                    csv_writer = csv.writer(loss_bleu_file) 
+                    csv_writer.writerow(i for i in log)  # Write data rows
+
                 if dev_bleu>best_bleu:
-                    logger.info("  Best bleu:%s",dev_bleu)
+                    logger.info("New Best bleu:%s",dev_bleu)
                     logger.info("  "+"*"*20)
                     best_bleu=dev_bleu
                     # Save best checkpoint for best bleu
