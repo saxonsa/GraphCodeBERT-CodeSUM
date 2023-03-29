@@ -397,6 +397,7 @@ def main():
         csv_writer = csv.writer(loss_bleu_file)
         # Write the header row
         csv_writer.writerow(['epoch', 'train_loss', 'bleu-4'])
+        loss_bleu_file.flush()
     
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
@@ -595,8 +596,9 @@ def main():
                 log.append(dev_bleu)
 
                 with open(loss_bleu_filename, mode='a', newline='') as loss_bleu_file:
-                    csv_writer = csv.writer(loss_bleu_file) 
-                    csv_writer.writerow(i for i in log)  # Write data rows
+                    csv_writer = csv.writer(loss_bleu_file)
+                    csv_writer.writerow(i for i in log)
+                    loss_bleu_file.flush()
 
                 if dev_bleu>best_bleu:
                     logger.info("New Best bleu:%s",dev_bleu)
